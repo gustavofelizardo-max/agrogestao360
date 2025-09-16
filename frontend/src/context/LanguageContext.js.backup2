@@ -1,0 +1,226 @@
+import React, { createContext, useContext, useState, useEffect } from 'react';
+
+const LanguageContext = createContext();
+
+export const useLanguage = () => {
+  const context = useContext(LanguageContext);
+  if (!context) {
+    throw new Error('useLanguage deve ser usado dentro de um LanguageProvider');
+  }
+  return context;
+};
+
+const translations = {
+  pt: {
+    // Login
+    'login.title': 'AgroTech - Login',
+    'login.userType': 'Tipo de usuário',
+    'login.email': 'Email',
+    'login.password': 'Senha',
+    'login.button': 'Entrar',
+    'login.loading': 'Entrando...',
+    'login.success': 'Login realizado com sucesso!',
+    'login.error': 'Erro ao fazer login',
+    'login.testCredentials': 'Usar credenciais de teste',
+    'login.googleLogin': 'Login com Google',
+    
+    // User Types
+    'userType.producer': 'Produtor',
+    'userType.supplier': 'Fornecedor',
+    'userType.buyer': 'Comprador',
+    
+    // Dashboard
+    'dashboard.title': 'Dashboard',
+    'dashboard.logout': 'Sair',
+    'dashboard.welcome': 'Bem-vindo',
+    'dashboard.producer': 'Produtor',
+    'dashboard.supplier': 'Fornecedor',
+    'dashboard.buyer': 'Comprador',
+    
+    // Navigation Menu
+    'nav.dashboard': 'Dashboard',
+    'nav.properties': 'Propriedades',
+    'nav.cultures': 'Culturas',
+    'nav.weather': 'Clima',
+    'nav.alerts': 'Alertas',
+    'nav.users': 'Usuários',
+    'nav.profile': 'Meu Perfil',
+    'nav.settings': 'Configurações',
+    
+    // Weather
+    'weather.title': 'Dashboard Meteorológico',
+    'weather.update': 'Atualizar',
+    'weather.updating': 'Buscando...',
+    'weather.humidity': 'Umidade',
+    'weather.wind': 'Vento',
+    'weather.pressure': 'Pressão',
+    'weather.visibility': 'Visibilidade',
+    'weather.sunrise': 'Nascer do sol',
+    'weather.sunset': 'Pôr do sol',
+    'weather.sunInfo': 'Nascer e Pôr do Sol',
+    'weather.empty.title': 'Nenhum dado meteorológico carregado',
+    'weather.empty.subtitle': 'Selecione uma propriedade ou digite um CEP para visualizar os dados do clima',
+    'weather.select.property': 'Selecionar propriedade',
+    'weather.enter.cep': 'Digite o CEP',
+    'weather.success.updated': 'Dados meteorológicos atualizados!',
+    
+    // Common
+    'common.loading': 'Carregando...',
+    'common.save': 'Salvar',
+    'common.cancel': 'Cancelar',
+    'common.edit': 'Editar',
+    'common.delete': 'Excluir'
+  },
+  
+  en: {
+    // Login
+    'login.title': 'AgroTech - Login',
+    'login.userType': 'User type',
+    'login.email': 'Email',
+    'login.password': 'Password',
+    'login.button': 'Login',
+    'login.loading': 'Logging in...',
+    'login.success': 'Login successful!',
+    'login.error': 'Login error',
+    'login.testCredentials': 'Use test credentials',
+    'login.googleLogin': 'Google Login',
+    
+    // User Types
+    'userType.producer': 'Producer',
+    'userType.supplier': 'Supplier',
+    'userType.buyer': 'Buyer',
+    
+    // Dashboard
+    'dashboard.title': 'Dashboard',
+    'dashboard.logout': 'Logout',
+    'dashboard.welcome': 'Welcome',
+    'dashboard.producer': 'Producer',
+    'dashboard.supplier': 'Supplier',
+    'dashboard.buyer': 'Buyer',
+    
+    // Navigation Menu
+    'nav.dashboard': 'Dashboard',
+    'nav.properties': 'Properties',
+    'nav.cultures': 'Cultures',
+    'nav.weather': 'Weather',
+    'nav.alerts': 'Alerts',
+    'nav.users': 'Users',
+    'nav.profile': 'My Profile',
+    'nav.settings': 'Settings',
+    
+    // Weather
+    'weather.title': 'Weather Dashboard',
+    'weather.update': 'Update',
+    'weather.updating': 'Searching...',
+    'weather.humidity': 'Humidity',
+    'weather.wind': 'Wind',
+    'weather.pressure': 'Pressure',
+    'weather.visibility': 'Visibility',
+    'weather.sunrise': 'Sunrise',
+    'weather.sunset': 'Sunset',
+    'weather.sunInfo': 'Sunrise and Sunset',
+    'weather.empty.title': 'No weather data loaded',
+    'weather.empty.subtitle': 'Select a property or enter a ZIP code to view weather data',
+    'weather.select.property': 'Select property',
+    'weather.enter.cep': 'Enter ZIP code',
+    'weather.success.updated': 'Weather data updated!',
+    
+    // Common
+    'common.loading': 'Loading...',
+    'common.save': 'Save',
+    'common.cancel': 'Cancel',
+    'common.edit': 'Edit',
+    'common.delete': 'Delete'
+  },
+
+  es: {
+    // Login
+    'login.title': 'AgroTech - Iniciar Sesión',
+    'login.userType': 'Tipo de usuario',
+    'login.email': 'Correo electrónico',
+    'login.password': 'Contraseña',
+    'login.button': 'Entrar',
+    'login.loading': 'Iniciando sesión...',
+    'login.success': '¡Inicio de sesión exitoso!',
+    'login.error': 'Error al iniciar sesión',
+    'login.testCredentials': 'Usar credenciales de prueba',
+    'login.googleLogin': 'Iniciar con Google',
+    
+    // User Types
+    'userType.producer': 'Productor',
+    'userType.supplier': 'Proveedor',
+    'userType.buyer': 'Comprador',
+    
+    // Dashboard
+    'dashboard.title': 'Panel de Control',
+    'dashboard.logout': 'Salir',
+    'dashboard.welcome': 'Bienvenido',
+    'dashboard.producer': 'Productor',
+    'dashboard.supplier': 'Proveedor',
+    'dashboard.buyer': 'Comprador',
+    
+    // Navigation Menu
+    'nav.dashboard': 'Panel',
+    'nav.properties': 'Propiedades',
+    'nav.cultures': 'Cultivos',
+    'nav.weather': 'Clima',
+    'nav.alerts': 'Alertas',
+    'nav.users': 'Usuarios',
+    'nav.profile': 'Mi Perfil',
+    'nav.settings': 'Configuración',
+    
+    // Weather
+    'weather.title': 'Panel Meteorológico',
+    'weather.update': 'Actualizar',
+    'weather.updating': 'Buscando...',
+    'weather.humidity': 'Humedad',
+    'weather.wind': 'Viento',
+    'weather.pressure': 'Presión',
+    'weather.visibility': 'Visibilidad',
+    'weather.sunrise': 'Amanecer',
+    'weather.sunset': 'Atardecer',
+    'weather.sunInfo': 'Amanecer y Atardecer',
+    'weather.empty.title': 'No hay datos meteorológicos cargados',
+    'weather.empty.subtitle': 'Seleccione una propiedad o ingrese un código postal para ver los datos del clima',
+    'weather.select.property': 'Seleccionar propiedad',
+    'weather.enter.cep': 'Ingrese código postal',
+    'weather.success.updated': '¡Datos meteorológicos actualizados!',
+    
+    // Common
+    'common.loading': 'Cargando...',
+    'common.save': 'Guardar',
+    'common.cancel': 'Cancelar',
+    'common.edit': 'Editar',
+    'common.delete': 'Eliminar'
+  }
+};
+
+export const LanguageProvider = ({ children }) => {
+  const [language, setLanguage] = useState(() => {
+    return localStorage.getItem('language') || 'pt';
+  });
+
+  useEffect(() => {
+    localStorage.setItem('language', language);
+  }, [language]);
+
+  const t = (key) => {
+    return translations[language][key] || key;
+  };
+
+  const changeLanguage = (lang) => {
+    setLanguage(lang);
+  };
+
+  const value = {
+    language,
+    setLanguage: changeLanguage,
+    t
+  };
+
+  return (
+    <LanguageContext.Provider value={value}>
+      {children}
+    </LanguageContext.Provider>
+  );
+};

@@ -1,0 +1,665 @@
+const express = require('express');
+const cors = require('cors');
+const sqlite3 = require('sqlite3').verbose();
+const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
+const axios = require('axios');
+const path = require('path');
+
+const app = express();
+const PORT = process.env.PORT || 3001;
+
+// Middlewares
+app.use(cors());
+app.use(express.json());
+
+// SQLite connection
+const dbPath = path.join(__dirname, 'agrotech.db');
+const db = new sqlite3.Database(dbPath, (err) => {
+  if (err) {
+    console.error('❌ Erro ao conectar ao SQLite:', err.message);
+  } else {
+    console.log('✅ SQLite conectado com sucesso!');
+  }
+});
+
+// JWT Secret
+const JWT_SECRET = 'your-secret-key-change-in-production';
+
+// Auth middleware
+const authenticateToken = (req, res, next) => {
+  const authHeader = req.headers['authorization'];
+  const token = authHeader && authHeader.split(' ')[1];
+
+  if (!token) {
+    return res.status(401).json({ success: false, message: 'Token não fornecido' });
+  }
+
+  jwt.verify(token, JWT_SECRET, (err, user) => {
+    if (err) {
+      return res.status(403).json({ success: false, message: 'Token inválido' });
+    }
+    req.user = user;
+    next();
+  });
+};
+
+// Create tables if they don't exist
+const createTables = () => {
+  db.serialize(() => {
+    // Users table
+    db.run(`
+      CREATE TABLE IF NOT EXISTS users (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        email TEXT UNIQUE NOT NULL,
+        password TEXT NOT NULL,
+        user_type TEXT NOT NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    // Cultures table
+    db.run(`
+      CREATE TABLE IF NOT EXISTS cultures (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        category TEXT,
+        season TEXT,
+        cycle_days INTEGER,
+        description TEXT,
+        user_id INTEGER,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (user_id) REFERENCES users (id)
+      )
+    `);
+
+    // Properties table
+    db.run(`
+      CREATE TABLE IF NOT EXISTS properties (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        cep TEXT,
+        address TEXT,
+        city TEXT,
+        state TEXT,
+        total_area REAL,
+        arable_area REAL,
+        legal_reserve REAL,
+        main_culture_id INTEGER,
+        has_irrigation BOOLEAN DEFAULT 0,
+        has_machinery BOOLEAN DEFAULT 0,
+        has_storage BOOLEAN DEFAULT 0,
+        description TEXT,
+        user_id INTEGER,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (user_id) REFERENCES users (id),
+        FOREIGN KEY (main_culture_id) REFERENCES cultures (id)
+      )
+    `);
+
+    console.log('✅ Tabelas criadas/verificadas com sucesso!');
+
+    // Create default user if not exists
+    db.get('SELECT * FROM users WHERE email = ?', ['gufeliza@gmail.com'], async (err, row) => {
+      if (err) {
+        console.error('Erro ao verificar usuário:', err);
+        return;
+      }
+
+      if (!row) {
+        const hashedPassword = await bcrypt.hash('123456', 10);
+        db.run(
+          'INSERT INTO users (name, email, password, user_type) VALUES (?, ?, ?, ?)',
+          ['Gustavo Felizardo', 'gufeliza@gmail.com', hashedPassword, 'producer'],
+          function(err) {
+            if (err) {
+              console.error('Erro ao criar usuário padrão:', err);
+            } else {
+              console.log('✅ Usuário padrão criado!');
+            }
+          }
+        );
+      }
+    });
+  });
+};
+
+createTables();
+
+// ================== ROTAS DE AUTENTICAÇÃO ==================
+
+app.post('/api/auth/login', async (req, res) => {
+  try {
+    const { email, password } = req.body;
+
+    db.get('SELECT * FROM users WHERE email = ?', [email], async (err, user) => {
+      if (err) {
+        console.error('Erro na consulta:', err);
+        return res.status(500).json({
+          success: false,
+          message: 'Erro interno do servidor'
+        });
+      }
+
+      if (!user) {
+        return res.status(401).json({
+          success: false,
+          message: 'Credenciais inválidas'
+        });
+      }
+
+      const isValidPassword = await bcrypt.compare(password, user.password);
+
+      if (!isValidPassword) {
+        return res.status(401).json({
+          success: false,
+          message: 'Credenciais inválidas'
+        });
+      }
+
+      const token = jwt.sign(
+        { 
+          userId: user.id, 
+          email: user.email, 
+          userType: user.user_type 
+        },
+        JWT_SECRET,
+        { expiresIn: '24h' }
+      );
+
+      res.json({
+        success: true,
+        message: 'Login realizado com sucesso!',
+        token,
+        user: {
+          id: user.id,
+          name: user.name,
+          email: user.email,
+          userType: user.user_type
+        }
+      });
+    });
+
+  } catch (error) {
+    console.error('Erro no login:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Erro interno do servidor'
+    });
+  }
+});
+
+// ================== ROTAS DE CULTURAS ==================
+
+// GET /api/cultures - Listar culturas
+app.get('/api/cultures', authenticateToken, (req, res) => {
+  db.all(
+    'SELECT * FROM cultures WHERE user_id = ? ORDER BY name ASC',
+    [req.user.userId],
+    (err, rows) => {
+      if (err) {
+        console.error('Erro ao buscar culturas:', err);
+        return res.status(500).json({
+          success: false,
+          message: 'Erro ao buscar culturas'
+        });
+      }
+
+      res.json({
+        success: true,
+        cultures: rows
+      });
+    }
+  );
+});
+
+// POST /api/cultures - Criar cultura
+app.post('/api/cultures', authenticateToken, (req, res) => {
+  const { name, category, season, cycle_days, description } = req.body;
+
+  if (!name?.trim()) {
+    return res.status(400).json({
+      success: false,
+      message: 'Nome da cultura é obrigatório'
+    });
+  }
+
+  db.run(
+    `INSERT INTO cultures (name, category, season, cycle_days, description, user_id) 
+     VALUES (?, ?, ?, ?, ?, ?)`,
+    [name.trim(), category, season, cycle_days || null, description, req.user.userId],
+    function(err) {
+      if (err) {
+        console.error('Erro ao criar cultura:', err);
+        return res.status(500).json({
+          success: false,
+          message: 'Erro ao criar cultura'
+        });
+      }
+
+      db.get(
+        'SELECT * FROM cultures WHERE id = ?',
+        [this.lastID],
+        (err, row) => {
+          if (err) {
+            console.error('Erro ao buscar cultura criada:', err);
+            return res.status(500).json({
+              success: false,
+              message: 'Erro ao buscar cultura criada'
+            });
+          }
+
+          res.status(201).json({
+            success: true,
+            message: 'Cultura criada com sucesso!',
+            culture: row
+          });
+        }
+      );
+    }
+  );
+});
+
+// PUT /api/cultures/:id - Atualizar cultura
+app.put('/api/cultures/:id', authenticateToken, (req, res) => {
+  const { id } = req.params;
+  const { name, category, season, cycle_days, description } = req.body;
+
+  if (!name?.trim()) {
+    return res.status(400).json({
+      success: false,
+      message: 'Nome da cultura é obrigatório'
+    });
+  }
+
+  db.run(
+    `UPDATE cultures 
+     SET name = ?, category = ?, season = ?, cycle_days = ?, description = ?, updated_at = CURRENT_TIMESTAMP
+     WHERE id = ? AND user_id = ?`,
+    [name.trim(), category, season, cycle_days || null, description, id, req.user.userId],
+    function(err) {
+      if (err) {
+        console.error('Erro ao atualizar cultura:', err);
+        return res.status(500).json({
+          success: false,
+          message: 'Erro ao atualizar cultura'
+        });
+      }
+
+      if (this.changes === 0) {
+        return res.status(404).json({
+          success: false,
+          message: 'Cultura não encontrada'
+        });
+      }
+
+      db.get(
+        'SELECT * FROM cultures WHERE id = ?',
+        [id],
+        (err, row) => {
+          if (err) {
+            console.error('Erro ao buscar cultura atualizada:', err);
+            return res.status(500).json({
+              success: false,
+              message: 'Erro ao buscar cultura atualizada'
+            });
+          }
+
+          res.json({
+            success: true,
+            message: 'Cultura atualizada com sucesso!',
+            culture: row
+          });
+        }
+      );
+    }
+  );
+});
+
+// DELETE /api/cultures/:id - Excluir cultura
+app.delete('/api/cultures/:id', authenticateToken, (req, res) => {
+  const { id } = req.params;
+
+  db.run(
+    'DELETE FROM cultures WHERE id = ? AND user_id = ?',
+    [id, req.user.userId],
+    function(err) {
+      if (err) {
+        console.error('Erro ao excluir cultura:', err);
+        return res.status(500).json({
+          success: false,
+          message: 'Erro ao excluir cultura'
+        });
+      }
+
+      if (this.changes === 0) {
+        return res.status(404).json({
+          success: false,
+          message: 'Cultura não encontrada'
+        });
+      }
+
+      res.json({
+        success: true,
+        message: 'Cultura excluída com sucesso!'
+      });
+    }
+  );
+});
+
+// ================== ROTAS DE PROPRIEDADES ==================
+
+// GET /api/properties - Listar propriedades
+app.get('/api/properties', authenticateToken, (req, res) => {
+  db.all(
+    `SELECT p.*, c.name as culture_name 
+     FROM properties p 
+     LEFT JOIN cultures c ON p.main_culture_id = c.id 
+     WHERE p.user_id = ? 
+     ORDER BY p.name ASC`,
+    [req.user.userId],
+    (err, rows) => {
+      if (err) {
+        console.error('Erro ao buscar propriedades:', err);
+        return res.status(500).json({
+          success: false,
+          message: 'Erro ao buscar propriedades'
+        });
+      }
+
+      res.json({
+        success: true,
+        properties: rows
+      });
+    }
+  );
+});
+
+// POST /api/properties - Criar propriedade
+app.post('/api/properties', authenticateToken, (req, res) => {
+  const { 
+    name, cep, address, city, state, total_area, arable_area, 
+    legal_reserve, main_culture_id, has_irrigation, has_machinery, 
+    has_storage, description 
+  } = req.body;
+
+  if (!name?.trim()) {
+    return res.status(400).json({
+      success: false,
+      message: 'Nome da propriedade é obrigatório'
+    });
+  }
+
+  db.run(
+    `INSERT INTO properties (
+      name, cep, address, city, state, total_area, arable_area, 
+      legal_reserve, main_culture_id, has_irrigation, has_machinery, 
+      has_storage, description, user_id
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [
+      name.trim(), cep, address, city, state, total_area, arable_area,
+      legal_reserve, main_culture_id || null, has_irrigation ? 1 : 0, 
+      has_machinery ? 1 : 0, has_storage ? 1 : 0, description, req.user.userId
+    ],
+    function(err) {
+      if (err) {
+        console.error('Erro ao criar propriedade:', err);
+        return res.status(500).json({
+          success: false,
+          message: 'Erro ao criar propriedade'
+        });
+      }
+
+      db.get(
+        'SELECT * FROM properties WHERE id = ?',
+        [this.lastID],
+        (err, row) => {
+          if (err) {
+            console.error('Erro ao buscar propriedade criada:', err);
+            return res.status(500).json({
+              success: false,
+              message: 'Erro ao buscar propriedade criada'
+            });
+          }
+
+          res.status(201).json({
+            success: true,
+            message: 'Propriedade criada com sucesso!',
+            property: row
+          });
+        }
+      );
+    }
+  );
+});
+
+// PUT /api/properties/:id - Atualizar propriedade
+app.put('/api/properties/:id', authenticateToken, (req, res) => {
+  const { id } = req.params;
+  const { 
+    name, cep, address, city, state, total_area, arable_area, 
+    legal_reserve, main_culture_id, has_irrigation, has_machinery, 
+    has_storage, description 
+  } = req.body;
+
+  if (!name?.trim()) {
+    return res.status(400).json({
+      success: false,
+      message: 'Nome da propriedade é obrigatório'
+    });
+  }
+
+  db.run(
+    `UPDATE properties 
+     SET name = ?, cep = ?, address = ?, city = ?, state = ?, 
+         total_area = ?, arable_area = ?, legal_reserve = ?, 
+         main_culture_id = ?, has_irrigation = ?, has_machinery = ?, 
+         has_storage = ?, description = ?, updated_at = CURRENT_TIMESTAMP
+     WHERE id = ? AND user_id = ?`,
+    [
+      name.trim(), cep, address, city, state, total_area, arable_area,
+      legal_reserve, main_culture_id || null, has_irrigation ? 1 : 0,
+      has_machinery ? 1 : 0, has_storage ? 1 : 0, description, id, req.user.userId
+    ],
+    function(err) {
+      if (err) {
+        console.error('Erro ao atualizar propriedade:', err);
+        return res.status(500).json({
+          success: false,
+          message: 'Erro ao atualizar propriedade'
+        });
+      }
+
+      if (this.changes === 0) {
+        return res.status(404).json({
+          success: false,
+          message: 'Propriedade não encontrada'
+        });
+      }
+
+      db.get(
+        'SELECT * FROM properties WHERE id = ?',
+        [id],
+        (err, row) => {
+          if (err) {
+            console.error('Erro ao buscar propriedade atualizada:', err);
+            return res.status(500).json({
+              success: false,
+              message: 'Erro ao buscar propriedade atualizada'
+            });
+          }
+
+          res.json({
+            success: true,
+            message: 'Propriedade atualizada com sucesso!',
+            property: row
+          });
+        }
+      );
+    }
+  );
+});
+
+// DELETE /api/properties/:id - Excluir propriedade
+app.delete('/api/properties/:id', authenticateToken, (req, res) => {
+  const { id } = req.params;
+
+  db.run(
+    'DELETE FROM properties WHERE id = ? AND user_id = ?',
+    [id, req.user.userId],
+    function(err) {
+      if (err) {
+        console.error('Erro ao excluir propriedade:', err);
+        return res.status(500).json({
+          success: false,
+          message: 'Erro ao excluir propriedade'
+        });
+      }
+
+      if (this.changes === 0) {
+        return res.status(404).json({
+          success: false,
+          message: 'Propriedade não encontrada'
+        });
+      }
+
+      res.json({
+        success: true,
+        message: 'Propriedade excluída com sucesso!'
+      });
+    }
+  );
+});
+
+// ================== ROTAS DE UTILIDADES ==================
+
+// GET /api/cep/:cep - Buscar dados do CEP
+app.get('/api/cep/:cep', async (req, res) => {
+  try {
+    const { cep } = req.params;
+    
+    if (!cep || cep.length !== 8) {
+      return res.status(400).json({
+        success: false,
+        message: 'CEP deve ter 8 dígitos'
+      });
+    }
+
+    const response = await axios.get(`https://viacep.com.br/ws/${cep}/json/`);
+    
+    if (response.data.erro) {
+      return res.status(404).json({
+        success: false,
+        message: 'CEP não encontrado'
+      });
+    }
+
+    res.json({
+      success: true,
+      data: {
+        address: response.data.logradouro,
+        city: response.data.localidade,
+        state: response.data.uf
+      }
+    });
+  } catch (error) {
+    console.error('Erro ao buscar CEP:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Erro ao buscar dados do CEP'
+    });
+  }
+});
+
+// GET /api/dashboard - Dados do dashboard
+app.get('/api/dashboard', authenticateToken, (req, res) => {
+  db.get(
+    'SELECT COUNT(*) as count, SUM(total_area) as total_area FROM properties WHERE user_id = ?',
+    [req.user.userId],
+    (err, propertiesResult) => {
+      if (err) {
+        console.error('Erro ao buscar propriedades do dashboard:', err);
+        return res.status(500).json({
+          success: false,
+          message: 'Erro ao buscar dados do dashboard'
+        });
+      }
+
+      db.get(
+        'SELECT COUNT(*) as count FROM cultures WHERE user_id = ?',
+        [req.user.userId],
+        (err, culturesResult) => {
+          if (err) {
+            console.error('Erro ao buscar culturas do dashboard:', err);
+            return res.status(500).json({
+              success: false,
+              message: 'Erro ao buscar dados do dashboard'
+            });
+          }
+
+          res.json({
+            success: true,
+            totalProperties: parseInt(propertiesResult.count) || 0,
+            cultivatedArea: parseFloat(propertiesResult.total_area) || 0,
+            totalCultures: parseInt(culturesResult.count) || 0,
+            activeAlerts: 0 // Para implementar depois
+          });
+        }
+      );
+    }
+  );
+});
+
+// Health check
+app.get('/api/health', (req, res) => {
+  res.json({ 
+    status: 'OK', 
+    message: 'AgroTech API funcionando com SQLite!',
+    timestamp: new Date().toISOString()
+  });
+});
+
+// Error handling middleware
+app.use((err, req, res, next) => {
+  console.error(err.stack);
+  res.status(500).json({
+    success: false,
+    message: 'Algo deu errado!'
+  });
+});
+
+// Graceful shutdown
+process.on('SIGINT', () => {
+  console.log('\n🔄 Fechando servidor...');
+  db.close((err) => {
+    if (err) {
+      console.error('Erro ao fechar banco de dados:', err.message);
+    } else {
+      console.log('✅ Banco de dados fechado.');
+    }
+    process.exit(0);
+  });
+});
+
+// Start server
+app.listen(PORT, () => {
+  console.log(`🚀 Servidor AgroTech rodando na porta ${PORT}`);
+  console.log(`💾 Usando SQLite - Banco: ${dbPath}`);
+  console.log(`📍 Health: http://localhost:${PORT}/api/health`);
+  console.log(`🔐 Login: http://localhost:${PORT}/api/auth/login`);
+  console.log('✅ Rotas disponíveis:');
+  console.log('   - POST /api/auth/login');
+  console.log('   - GET /api/cultures');
+  console.log('   - POST /api/cultures');
+  console.log('   - PUT /api/cultures/:id');
+  console.log('   - DELETE /api/cultures/:id');
+  console.log('   - GET /api/properties');
+  console.log('   - POST /api/properties');
+  console.log('   - PUT /api/properties/:id');
+  console.log('   - DELETE /api/properties/:id');
+  console.log('   - GET /api/cep/:cep');
+  console.log('   - GET /api/dashboard');
+});

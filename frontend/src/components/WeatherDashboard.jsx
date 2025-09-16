@@ -1,0 +1,395 @@
+import React, { useState, useEffect } from 'react';
+import { useLanguage } from '../context/LanguageContext';
+import { api } from '../services/api';
+import { toast } from 'react-hot-toast';
+import { 
+  Cloud, 
+  Sun, 
+  CloudRain, 
+  Wind, 
+  Droplets, 
+  Eye, 
+  Thermometer,
+  Sunrise,
+  Sunset,
+  RefreshCw
+} from 'lucide-react';
+
+const WeatherDashboard = () => {
+  const { t } = useLanguage();
+  const [weatherData, setWeatherData] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [cep, setCep] = useState('');
+  const [properties, setProperties] = useState([]);
+
+  useEffect(() => {
+    fetchProperties();
+  }, []);
+
+  const fetchProperties = async () => {
+    try {
+      const response = await api.get('/properties');
+      setProperties(response.data.properties || []);
+      
+      if (response.data.properties && response.data.properties.length > 0) {
+        const firstProperty = response.data.properties[0];
+        if (firstProperty.cep) {
+          setCep(firstProperty.cep);
+          fetchWeatherByCep(firstProperty.cep);
+        }
+      }
+    } catch (error) {
+      console.error('Erro ao buscar propriedades:', error);
+    }
+  };
+
+  const fetchWeatherByCep = async (targetCep) => {
+    if (!targetCep || targetCep.length !== 8) {
+      toast.error('CEP deve ter 8 dígitos');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const response = await api.get(`/weather/${targetCep}`);
+      setWeatherData(response.data.weather);
+      toast.success('Dados meteorológicos atualizados!');
+    } catch (error) {
+      console.error('Erro ao buscar dados meteorológicos:', error);
+      toast.error('Erro ao buscar dados meteorológicos');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    const cleanCep = cep.replace(/\D/g, '');
+    if (cleanCep.length === 8) {
+      fetchWeatherByCep(cleanCep);
+    } else {
+      toast.error('CEP deve ter 8 dígitos');
+    }
+  };
+
+  const handlePropertyChange = (e) => {
+    const selectedProperty = properties.find(p => p.id === parseInt(e.target.value));
+    if (selectedProperty && selectedProperty.cep) {
+      setCep(selectedProperty.cep);
+      fetchWeatherByCep(selectedProperty.cep);
+    }
+  };
+
+  const getWeatherIcon = (condition) => {
+    if (!condition) return <Cloud size={64} color="#64748b" />;
+    
+    const conditionLower = condition.toLowerCase();
+    if (conditionLower.includes('sol') || conditionLower.includes('claro')) {
+      return <Sun size={64} color="#f59e0b" />;
+    } else if (conditionLower.includes('chuva') || conditionLower.includes('tempestade')) {
+      return <CloudRain size={64} color="#3b82f6" />;
+    } else {
+      return <Cloud size={64} color="#64748b" />;
+    }
+  };
+
+  return (
+    <div style={{ padding: '20px', fontFamily: 'Arial, sans-serif' }}>
+      {/* Header */}
+      <div style={{ 
+        display: 'flex', 
+        justifyContent: 'space-between', 
+        alignItems: 'center', 
+        marginBottom: '30px',
+        flexWrap: 'wrap',
+        gap: '20px'
+      }}>
+        <h2 style={{ 
+          color: '#1e293b', 
+          fontSize: '32px', 
+          fontWeight: '700',
+          margin: 0,
+          display: 'flex',
+          alignItems: 'center',
+          gap: '12px'
+        }}>
+          <Cloud size={36} color="#3b82f6" />
+          {t('weather.title') || 'Monitoramento Meteorológico'}
+        </h2>
+
+        <form onSubmit={handleSubmit} style={{ 
+          display: 'flex', 
+          gap: '15px', 
+          alignItems: 'center',
+          flexWrap: 'wrap'
+        }}>
+          {properties.length > 0 && (
+            <select
+              onChange={handlePropertyChange}
+              style={{
+                padding: '12px 15px',
+                border: '2px solid #e2e8f0',
+                borderRadius: '8px',
+                fontSize: '16px',
+                backgroundColor: '#fff',
+                minWidth: '180px',
+                cursor: 'pointer'
+              }}
+            >
+              <option value="">Selecione uma propriedade</option>
+              {properties.map(property => (
+                <option key={property.id} value={property.id}>
+                  {property.name} - {property.cep}
+                </option>
+              ))}
+            </select>
+          )}
+
+          <input
+            type="text"
+            placeholder="Digite o CEP (ex: 12345678)"
+            value={cep}
+            onChange={(e) => setCep(e.target.value.replace(/\D/g, '').slice(0, 8))}
+            style={{
+              padding: '12px 15px',
+              border: '2px solid #e2e8f0',
+              borderRadius: '8px',
+              fontSize: '16px',
+              minWidth: '200px'
+            }}
+            maxLength="8"
+          />
+
+          <button
+            type="submit"
+            disabled={loading}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              backgroundColor: loading ? '#94a3b8' : '#3b82f6',
+              color: 'white',
+              border: 'none',
+              borderRadius: '8px',
+              padding: '12px 20px',
+              fontSize: '16px',
+              fontWeight: '600',
+              cursor: loading ? 'not-allowed' : 'pointer',
+              transition: 'background-color 0.2s'
+            }}
+          >
+            <RefreshCw size={16} style={{ animation: loading ? 'spin 1s linear infinite' : 'none' }} />
+            {loading ? 
+              (t('weather.updating') || 'Atualizando...') : 
+              (t('weather.update') || 'Atualizar')
+            }
+          </button>
+        </form>
+      </div>
+
+      {/* Weather Data */}
+      {weatherData ? (
+        <div style={{ display: 'grid', gap: '25px' }}>
+          {/* Cartão Principal */}
+          <div style={{
+            backgroundColor: '#fff',
+            padding: '30px',
+            borderRadius: '16px',
+            boxShadow: '0 4px 6px rgba(0, 0, 0, 0.05)',
+            border: '1px solid #e2e8f0',
+            display: 'grid',
+            gridTemplateColumns: 'auto 1fr auto',
+            alignItems: 'center',
+            gap: '30px'
+          }}>
+            <div style={{ textAlign: 'center' }}>
+              {getWeatherIcon(weatherData.condition)}
+              <h3 style={{ 
+                color: '#1e293b', 
+                fontSize: '24px', 
+                fontWeight: '600', 
+                marginTop: '15px',
+                marginBottom: '5px' 
+              }}>
+                {weatherData.location}
+              </h3>
+              <p style={{ color: '#64748b', fontSize: '16px', margin: 0 }}>
+                {weatherData.condition}
+              </p>
+            </div>
+
+            <div style={{ textAlign: 'center' }}>
+              <div style={{ fontSize: '72px', fontWeight: '700', color: '#1e293b', lineHeight: 1 }}>
+                {weatherData.temperature}°C
+              </div>
+              <p style={{ color: '#64748b', fontSize: '18px', marginTop: '10px', margin: 0 }}>
+                {t('weather.feels_like') || 'Sensação térmica'}: {weatherData.feelsLike}°C
+              </p>
+            </div>
+
+            <div style={{ textAlign: 'right' }}>
+              <div style={{ marginBottom: '15px' }}>
+                <span style={{ color: '#64748b', fontSize: '14px' }}>
+                  {t('weather.max_temp') || 'Máxima'}
+                </span>
+                <div style={{ fontSize: '24px', fontWeight: '600', color: '#dc2626' }}>
+                  {weatherData.maxTemp}°C
+                </div>
+              </div>
+              <div>
+                <span style={{ color: '#64748b', fontSize: '14px' }}>
+                  {t('weather.min_temp') || 'Mínima'}
+                </span>
+                <div style={{ fontSize: '24px', fontWeight: '600', color: '#2563eb' }}>
+                  {weatherData.minTemp}°C
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Métricas Detalhadas */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '20px' }}>
+            <div style={{
+              backgroundColor: '#fff',
+              padding: '25px',
+              borderRadius: '12px',
+              boxShadow: '0 4px 6px rgba(0, 0, 0, 0.05)',
+              border: '1px solid #e2e8f0'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '15px' }}>
+                <Droplets size={24} color="#3b82f6" />
+                <h4 style={{ color: '#1e293b', fontSize: '18px', fontWeight: '600', margin: 0 }}>
+                  {t('weather.humidity') || 'Umidade'}
+                </h4>
+              </div>
+              <div style={{ fontSize: '32px', fontWeight: '700', color: '#3b82f6' }}>
+                {weatherData.humidity}%
+              </div>
+            </div>
+
+            <div style={{
+              backgroundColor: '#fff',
+              padding: '25px',
+              borderRadius: '12px',
+              boxShadow: '0 4px 6px rgba(0, 0, 0, 0.05)',
+              border: '1px solid #e2e8f0'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '15px' }}>
+                <Wind size={24} color="#10b981" />
+                <h4 style={{ color: '#1e293b', fontSize: '18px', fontWeight: '600', margin: 0 }}>
+                  {t('weather.wind') || 'Vento'}
+                </h4>
+              </div>
+              <div style={{ fontSize: '32px', fontWeight: '700', color: '#10b981' }}>
+                {weatherData.windSpeed} km/h
+              </div>
+              <div style={{ fontSize: '14px', color: '#64748b', marginTop: '5px' }}>
+                {t('weather.direction') || 'Direção'}: {weatherData.windDirection}
+              </div>
+            </div>
+
+            <div style={{
+              backgroundColor: '#fff',
+              padding: '25px',
+              borderRadius: '12px',
+              boxShadow: '0 4px 6px rgba(0, 0, 0, 0.05)',
+              border: '1px solid #e2e8f0'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '15px' }}>
+                <Thermometer size={24} color="#f59e0b" />
+                <h4 style={{ color: '#1e293b', fontSize: '18px', fontWeight: '600', margin: 0 }}>
+                  {t('weather.pressure') || 'Pressão'}
+                </h4>
+              </div>
+              <div style={{ fontSize: '32px', fontWeight: '700', color: '#f59e0b' }}>
+                {weatherData.pressure} hPa
+              </div>
+            </div>
+
+            <div style={{
+              backgroundColor: '#fff',
+              padding: '25px',
+              borderRadius: '12px',
+              boxShadow: '0 4px 6px rgba(0, 0, 0, 0.05)',
+              border: '1px solid #e2e8f0'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '15px' }}>
+                <Eye size={24} color="#8b5cf6" />
+                <h4 style={{ color: '#1e293b', fontSize: '18px', fontWeight: '600', margin: 0 }}>
+                  {t('weather.visibility') || 'Visibilidade'}
+                </h4>
+              </div>
+              <div style={{ fontSize: '32px', fontWeight: '700', color: '#8b5cf6' }}>
+                {weatherData.visibility} km
+              </div>
+            </div>
+          </div>
+
+          {/* Sol */}
+          <div style={{
+            backgroundColor: '#fff',
+            padding: '25px',
+            borderRadius: '12px',
+            boxShadow: '0 4px 6px rgba(0, 0, 0, 0.05)',
+            border: '1px solid #e2e8f0'
+          }}>
+            <h4 style={{ color: '#1e293b', fontSize: '18px', fontWeight: '600', marginBottom: '20px' }}>
+              Nascer e Pôr do Sol
+            </h4>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <Sunrise size={24} color="#f59e0b" />
+                <div>
+                  <div style={{ fontSize: '18px', fontWeight: '600', color: '#1e293b' }}>
+                    {weatherData.sunrise}
+                  </div>
+                  <div style={{ fontSize: '14px', color: '#64748b' }}>
+                    {t('weather.sunrise') || 'Nascer do sol'}
+                  </div>
+                </div>
+              </div>
+              
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <Sunset size={24} color="#f97316" />
+                <div>
+                  <div style={{ fontSize: '18px', fontWeight: '600', color: '#1e293b' }}>
+                    {weatherData.sunset}
+                  </div>
+                  <div style={{ fontSize: '14px', color: '#64748b' }}>
+                    {t('weather.sunset') || 'Pôr do sol'}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div style={{
+          backgroundColor: '#fff',
+          padding: '60px',
+          borderRadius: '16px',
+          boxShadow: '0 4px 6px rgba(0, 0, 0, 0.05)',
+          border: '1px solid #e2e8f0',
+          textAlign: 'center'
+        }}>
+          <Cloud size={64} color="#d1d5db" style={{ marginBottom: '20px' }} />
+          <h3 style={{ color: '#64748b', marginBottom: '15px', fontSize: '20px' }}>
+            {t('weather.empty.title') || 'Nenhum dado meteorológico carregado'}
+          </h3>
+          <p style={{ color: '#94a3b8', marginBottom: '0', fontSize: '16px' }}>
+            {t('weather.empty.description') || 'Selecione uma propriedade ou digite um CEP para visualizar os dados do clima'}
+          </p>
+        </div>
+      )}
+
+      <style jsx>{`
+        @keyframes spin {
+          0% { transform: rotate(0deg); }
+          100% { transform: rotate(360deg); }
+        }
+      `}</style>
+    </div>
+  );
+};
+
+export default WeatherDashboard;

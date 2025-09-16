@@ -1,0 +1,217 @@
+import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
+import { useLanguage } from '../context/LanguageContext';
+import { authService } from '../services/api';
+import { toast } from 'react-hot-toast';
+
+const Login = () => {
+  const navigate = useNavigate();
+  const { login } = useAuth();
+  const { t, language, setLanguage } = useLanguage();
+  const [loading, setLoading] = useState(false);
+  
+  const [formData, setFormData] = useState({
+    email: '',
+    password: '',
+    userType: 'producer'
+  });
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+
+    try {
+      console.log('Enviando para o servidor:', formData);
+      
+      const response = await authService.login(formData);
+      
+      if (response.data.success) {
+        login(response.data.token, response.data.user);
+        toast.success(t('login.success'));
+        navigate('/');
+      } else {
+        toast.error(response.data.message || t('login.error'));
+      }
+    } catch (error) {
+      console.error('Erro no login:', error);
+      const errorMessage = error.response?.data?.message || t('login.error');
+      toast.error(errorMessage);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleInputChange = (e) => {
+    setFormData({
+      ...formData,
+      [e.target.name]: e.target.value
+    });
+  };
+
+  const useTestCredentials = () => {
+    setFormData({
+      email: 'produtor@teste.com',
+      password: '123456',
+      userType: 'producer'
+    });
+    toast.success('Credenciais de teste carregadas!');
+  };
+
+  return (
+    <div style={{ 
+      display: 'flex', 
+      justifyContent: 'center', 
+      alignItems: 'center', 
+      minHeight: '100vh',
+      backgroundColor: '#f0f8ff',
+      backgroundImage: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)'
+    }}>
+      <div style={{
+        background: 'white',
+        padding: '40px',
+        borderRadius: '20px',
+        boxShadow: '0 20px 40px rgba(0, 0, 0, 0.1)',
+        width: '100%',
+        maxWidth: '400px'
+      }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '30px' }}>
+          <h2 style={{ margin: 0, color: '#333', fontSize: '24px', fontWeight: 'bold' }}>
+            {t('login.title')}
+          </h2>
+          <button
+            onClick={() => setLanguage(language === 'pt' ? 'en' : 'pt')}
+            style={{
+              background: 'none',
+              border: 'none',
+              cursor: 'pointer',
+              color: '#666',
+              fontSize: '14px'
+            }}
+          >
+            {language === 'pt' ? 'EN' : 'PT'}
+          </button>
+        </div>
+        
+        <form onSubmit={handleSubmit}>
+          <div style={{ marginBottom: '20px' }}>
+            <label style={{ 
+              display: 'block', 
+              marginBottom: '8px', 
+              color: '#555',
+              fontWeight: '500'
+            }}>
+              {t('login.userType')}:
+            </label>
+            <select
+              name="userType"
+              value={formData.userType}
+              onChange={handleInputChange}
+              style={{
+                width: '100%',
+                padding: '12px',
+                border: '2px solid #e1e5e9',
+                borderRadius: '8px',
+                fontSize: '16px',
+                backgroundColor: '#fff'
+              }}
+            >
+              <option value="producer">{t('userType.producer')}</option>
+              <option value="supplier">{t('userType.supplier')}</option>
+              <option value="buyer">{t('userType.buyer')}</option>
+            </select>
+          </div>
+
+          <div style={{ marginBottom: '20px' }}>
+            <label style={{ 
+              display: 'block', 
+              marginBottom: '8px', 
+              color: '#555',
+              fontWeight: '500'
+            }}>
+              {t('login.email')}:
+            </label>
+            <input
+              type="email"
+              name="email"
+              value={formData.email}
+              onChange={handleInputChange}
+              required
+              style={{
+                width: '100%',
+                padding: '12px',
+                border: '2px solid #e1e5e9',
+                borderRadius: '8px',
+                fontSize: '16px',
+                backgroundColor: '#fff'
+              }}
+            />
+          </div>
+
+          <div style={{ marginBottom: '25px' }}>
+            <label style={{ 
+              display: 'block', 
+              marginBottom: '8px', 
+              color: '#555',
+              fontWeight: '500'
+            }}>
+              {t('login.password')}:
+            </label>
+            <input
+              type="password"
+              name="password"
+              value={formData.password}
+              onChange={handleInputChange}
+              required
+              style={{
+                width: '100%',
+                padding: '12px',
+                border: '2px solid #e1e5e9',
+                borderRadius: '8px',
+                fontSize: '16px',
+                backgroundColor: '#fff'
+              }}
+            />
+          </div>
+
+          <button
+            type="submit"
+            disabled={loading}
+            style={{
+              width: '100%',
+              padding: '14px',
+              backgroundColor: loading ? '#ccc' : '#667eea',
+              color: 'white',
+              border: 'none',
+              borderRadius: '8px',
+              fontSize: '16px',
+              fontWeight: 'bold',
+              cursor: loading ? 'not-allowed' : 'pointer',
+              marginBottom: '15px'
+            }}
+          >
+            {loading ? t('login.loading') : t('login.button')}
+          </button>
+        </form>
+
+        <button
+          onClick={useTestCredentials}
+          style={{
+            width: '100%',
+            padding: '12px',
+            backgroundColor: '#48bb78',
+            color: 'white',
+            border: 'none',
+            borderRadius: '8px',
+            fontSize: '14px',
+            cursor: 'pointer'
+          }}
+        >
+          {t('login.testCredentials')}
+        </button>
+      </div>
+    </div>
+  );
+};
+
+export default Login;

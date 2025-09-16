@@ -1,0 +1,409 @@
+
+import React, { useState, useEffect } from 'react';
+import { useAuth } from '../context/AuthContext';
+import { useLanguage } from '../context/LanguageContext';
+import { api } from '../services/api';
+import { toast } from 'react-hot-toast';
+import { 
+  LogOut, 
+  Home,
+  MapPin,
+  Cloud,
+  Bell,
+  Settings,
+  User,
+  Leaf,
+  Globe
+} from 'lucide-react';
+
+// Importar componentes
+import Properties from './Properties';
+import WeatherDashboard from './WeatherDashboard';
+import Cultures from './Cultures';
+import Alerts from './Alerts';
+import SystemSettings from './SystemSettings';
+import UsersManagement from './UsersManagement';
+
+const Dashboard = () => {
+  const { user, logout } = useAuth();
+  const { language, cycleLanguage, t, getLanguageFlag, getLanguageLabel } = useLanguage();
+  const [activeTab, setActiveTab] = useState('dashboard');
+  const [dashboardData, setDashboardData] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [hasError, setHasError] = useState(false);
+
+  const menuItems = [
+    { id: 'dashboard', label: t('menu.dashboard'), icon: <Home size={18} /> },
+    { id: 'properties', label: t('menu.properties'), icon: <MapPin size={18} /> },
+    { id: 'cultures', label: t('menu.cultures'), icon: <Leaf size={18} /> },
+    { id: 'weather', label: t('menu.weather'), icon: <Cloud size={18} /> },
+    { id: 'alerts', label: t('menu.alerts'), icon: <Bell size={18} /> },
+    ...(user?.userType === 'producer' ? [
+      { id: 'users', label: t('menu.users'), icon: <User size={18} /> }
+    ] : []),
+    { id: 'settings', label: t('menu.settings'), icon: <Settings size={18} /> }
+  ];
+
+  useEffect(() => {
+    if (activeTab === 'dashboard' && !dashboardData && !loading && !hasError) {
+      fetchDashboardData();
+    }
+  }, [activeTab, dashboardData, loading, hasError]);
+
+  const fetchDashboardData = async () => {
+    try {
+      setLoading(true);
+      setHasError(false);
+      
+      const response = await api.get('/dashboard');
+      
+      if (response.data && response.data.success !== false) {
+        setDashboardData({
+          totalProperties: response.data.totalProperties || 0,
+          cultivatedArea: response.data.cultivatedArea || 0,
+          totalCultures: response.data.totalCultures || 0,
+          activeAlerts: response.data.activeAlerts || 0
+        });
+      } else {
+        throw new Error('Dados inválidos retornados do servidor');
+      }
+    } catch (error) {
+      console.error('Erro ao buscar dados do dashboard:', error);
+      setHasError(true);
+      
+      if (!hasError) {
+        toast.error('Não foi possível carregar estatísticas. Usando dados padrão.');
+      }
+      
+      setDashboardData({
+        totalProperties: 0,
+        cultivatedArea: 0,
+        totalCultures: 0,
+        activeAlerts: 0
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleLogout = () => {
+    logout();
+    toast.success(t('auth.logout_success'));
+  };
+
+  const renderContent = () => {
+    switch (activeTab) {
+      case 'dashboard':
+        return (
+          <div style={{ padding: '25px' }}>
+            <h2 style={{ 
+              color: '#1e293b', 
+              marginBottom: '30px', 
+              fontSize: '28px', 
+              fontWeight: '600' 
+            }}>
+              {t('dashboard.welcome')}, {user?.name || user?.email}!
+            </h2>
+            
+            {loading ? (
+              <div style={{ textAlign: 'center', padding: '60px' }}>
+                <div style={{
+                  width: '40px',
+                  height: '40px',
+                  border: '3px solid #f3f3f3',
+                  borderTop: '3px solid #3b82f6',
+                  borderRadius: '50%',
+                  animation: 'spin 1s linear infinite',
+                  margin: '0 auto'
+                }}></div>
+                <p style={{ marginTop: '15px', color: '#6b7280' }}>
+                  {t('common.loading')}
+                </p>
+              </div>
+            ) : (
+              <div style={{ 
+                display: 'grid', 
+                gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', 
+                gap: '20px' 
+              }}>
+                <div style={{
+                  backgroundColor: '#fff',
+                  padding: '25px',
+                  borderRadius: '12px',
+                  boxShadow: '0 4px 6px rgba(0, 0, 0, 0.05)',
+                  border: '1px solid #e2e8f0'
+                }}>
+                  <h3 style={{ color: '#1e293b', marginBottom: '15px', fontSize: '16px' }}>
+                    {t('dashboard.total_properties')}
+                  </h3>
+                  <p style={{ fontSize: '32px', fontWeight: '700', color: '#3b82f6', margin: 0 }}>
+                    {dashboardData?.totalProperties || 0}
+                  </p>
+                </div>
+
+                <div style={{
+                  backgroundColor: '#fff',
+                  padding: '25px',
+                  borderRadius: '12px',
+                  boxShadow: '0 4px 6px rgba(0, 0, 0, 0.05)',
+                  border: '1px solid #e2e8f0'
+                }}>
+                  <h3 style={{ color: '#1e293b', marginBottom: '15px', fontSize: '16px' }}>
+                    {t('dashboard.cultivated_area')}
+                  </h3>
+                  <p style={{ fontSize: '32px', fontWeight: '700', color: '#059669', margin: 0 }}>
+                    {dashboardData?.cultivatedArea || 0} ha
+                  </p>
+                </div>
+
+                <div style={{
+                  backgroundColor: '#fff',
+                  padding: '25px',
+                  borderRadius: '12px',
+                  boxShadow: '0 4px 6px rgba(0, 0, 0, 0.05)',
+                  border: '1px solid #e2e8f0'
+                }}>
+                  <h3 style={{ color: '#1e293b', marginBottom: '15px', fontSize: '16px' }}>
+                    {t('dashboard.total_cultures')}
+                  </h3>
+                  <p style={{ fontSize: '32px', fontWeight: '700', color: '#f59e0b', margin: 0 }}>
+                    {dashboardData?.totalCultures || 0}
+                  </p>
+                </div>
+
+                <div style={{
+                  backgroundColor: '#fff',
+                  padding: '25px',
+                  borderRadius: '12px',
+                  boxShadow: '0 4px 6px rgba(0, 0, 0, 0.05)',
+                  border: '1px solid #e2e8f0'
+                }}>
+                  <h3 style={{ color: '#1e293b', marginBottom: '15px', fontSize: '16px' }}>
+                    {t('dashboard.active_alerts')}
+                  </h3>
+                  <p style={{ fontSize: '32px', fontWeight: '700', color: '#ef4444', margin: 0 }}>
+                    {dashboardData?.activeAlerts || 0}
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {hasError && (
+              <div style={{
+                marginTop: '20px',
+                padding: '15px',
+                backgroundColor: '#fef2f2',
+                border: '1px solid #fecaca',
+                borderRadius: '8px',
+                color: '#991b1b',
+                fontSize: '14px'
+              }}>
+                ⚠️ Conectado ao sistema, mas algumas estatísticas podem não estar atualizadas.
+              </div>
+            )}
+          </div>
+        );
+      
+      case 'properties':
+        return <Properties />;
+      
+      case 'cultures':
+        return <Cultures />;
+      
+      case 'weather':
+        return <WeatherDashboard />;
+      
+      case 'alerts':
+        return <Alerts />;
+      
+      case 'users':
+        return <UsersManagement />;
+      
+      case 'settings':
+        return <UsersManagement />;
+      
+      default:
+        return <div>Página não encontrada</div>;
+    }
+  };
+
+  return (
+    <div style={{ 
+      display: 'flex', 
+      minHeight: '100vh', 
+      backgroundColor: '#f8fafc',
+      fontFamily: 'Arial, sans-serif'
+    }}>
+      {/* Sidebar */}
+      <div style={{
+        width: '280px',
+        backgroundColor: '#fff',
+        borderRight: '1px solid #e2e8f0',
+        padding: '20px',
+        display: 'flex',
+        flexDirection: 'column',
+        position: 'fixed',
+        height: '100vh',
+        overflowY: 'auto'
+      }}>
+        {/* Header */}
+        <div style={{ marginBottom: '30px' }}>
+          <h1 style={{ 
+            color: '#1e293b', 
+            fontSize: '24px', 
+            fontWeight: '700',
+            margin: '0 0 8px 0'
+          }}>
+            AgroTech
+          </h1>
+          <p style={{ 
+            color: '#64748b', 
+            fontSize: '14px',
+            margin: 0
+          }}>
+            {user?.name || user?.email}
+          </p>
+          <span style={{
+            backgroundColor: user?.userType === 'producer' ? '#dcfce7' : 
+                           user?.userType === 'supplier' ? '#dbeafe' : '#fef3c7',
+            color: user?.userType === 'producer' ? '#166534' : 
+                   user?.userType === 'supplier' ? '#1e40af' : '#92400e',
+            padding: '4px 12px',
+            borderRadius: '12px',
+            fontSize: '12px',
+            fontWeight: '500',
+            marginTop: '8px',
+            display: 'inline-block'
+          }}>
+            {user?.userType === 'producer' ? 
+              t('user.types.producer') :
+              user?.userType === 'supplier' ? 
+              t('user.types.supplier') : 
+              t('user.types.buyer')
+            }
+          </span>
+        </div>
+
+        {/* Menu Items */}
+        <nav style={{ flex: 1 }}>
+          {menuItems.map((item) => (
+            <button
+              key={item.id}
+              onClick={() => setActiveTab(item.id)}
+              style={{
+                width: '100%',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '12px',
+                padding: '12px 16px',
+                marginBottom: '4px',
+                backgroundColor: activeTab === item.id ? '#f1f5f9' : 'transparent',
+                color: activeTab === item.id ? '#3b82f6' : '#64748b',
+                border: 'none',
+                borderRadius: '8px',
+                cursor: 'pointer',
+                fontSize: '14px',
+                fontWeight: '500',
+                textAlign: 'left',
+                transition: 'all 0.2s'
+              }}
+              onMouseOver={(e) => {
+                if (activeTab !== item.id) {
+                  e.target.style.backgroundColor = '#f8fafc';
+                }
+              }}
+              onMouseOut={(e) => {
+                if (activeTab !== item.id) {
+                  e.target.style.backgroundColor = 'transparent';
+                }
+              }}
+            >
+              {item.icon}
+              {item.label}
+            </button>
+          ))}
+        </nav>
+
+        {/* Footer - SELETOR DE IDIOMAS PRÓXIMO AO BOTÃO SAIR */}
+        <div style={{ 
+          borderTop: '1px solid #e2e8f0', 
+          paddingTop: '20px',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '12px'
+        }}>
+          {/* Seletor de idioma - POSICIONADO ANTES DO BOTÃO SAIR */}
+          <button
+            onClick={cycleLanguage}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '10px',
+              backgroundColor: '#f8fafc',
+              color: '#374151',
+              border: '1px solid #e2e8f0',
+              borderRadius: '8px',
+              padding: '10px 15px',
+              cursor: 'pointer',
+              fontSize: '14px',
+              fontWeight: '500',
+              width: '100%',
+              justifyContent: 'center',
+              transition: 'background-color 0.2s'
+            }}
+            onMouseOver={(e) => e.target.style.backgroundColor = '#f1f5f9'}
+            onMouseOut={(e) => e.target.style.backgroundColor = '#f8fafc'}
+          >
+            <Globe size={16} />
+            {getLanguageFlag(language)} {getLanguageLabel(language)}
+          </button>
+          
+          {/* Botão de logout - LOGO APÓS O SELETOR DE IDIOMAS */}
+          <button
+            onClick={handleLogout}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '10px',
+              backgroundColor: '#ef4444',
+              color: 'white',
+              border: 'none',
+              borderRadius: '8px',
+              padding: '12px 15px',
+              cursor: 'pointer',
+              fontSize: '14px',
+              fontWeight: '600',
+              width: '100%',
+              justifyContent: 'center',
+              transition: 'background-color 0.2s'
+            }}
+            onMouseOver={(e) => e.target.style.backgroundColor = '#dc2626'}
+            onMouseOut={(e) => e.target.style.backgroundColor = '#ef4444'}
+          >
+            <LogOut size={16} />
+            {t('auth.logout')}
+          </button>
+        </div>
+      </div>
+
+      {/* Main Content */}
+      <div style={{ 
+        marginLeft: '280px', 
+        flex: 1, 
+        overflow: 'auto',
+        minHeight: '100vh'
+      }}>
+        {renderContent()}
+      </div>
+
+      <style jsx>{`
+        @keyframes spin {
+          0% { transform: rotate(0deg); }
+          100% { transform: rotate(360deg); }
+        }
+      `}</style>
+    </div>
+  );
+};
+
+export default Dashboard;

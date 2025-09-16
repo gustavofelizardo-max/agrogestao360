@@ -1,0 +1,177 @@
+import React, { createContext, useContext, useState, useEffect } from 'react';
+
+const LanguageContext = createContext();
+
+export const useLanguage = () => {
+  const context = useContext(LanguageContext);
+  if (!context) {
+    throw new Error('useLanguage deve ser usado dentro de um LanguageProvider');
+  }
+  return context;
+};
+
+const translations = {
+  pt: {
+    // Menu
+    'menu.dashboard': 'Dashboard',
+    'menu.properties': 'Propriedades',
+    'menu.cultures': 'Culturas',
+    'menu.weather': 'Clima',
+    'menu.alerts': 'Alertas',
+    'menu.users': 'Usuários',
+    'menu.settings': 'Configurações',
+
+    // Auth
+    'auth.login': 'Entrar',
+    'auth.logout': 'Sair',
+    'auth.logout_success': 'Logout realizado com sucesso!',
+    'auth.logging_in': 'Entrando...',
+
+    // User Types
+    'user.types.producer': 'Produtor',
+    'user.types.supplier': 'Fornecedor',
+    'user.types.buyer': 'Comprador',
+
+    // Dashboard
+    'dashboard.welcome': 'Bem-vindo',
+    'dashboard.total_properties': 'Total de Propriedades',
+    'dashboard.cultivated_area': 'Área Cultivada',
+    'dashboard.total_cultures': 'Culturas Cadastradas',
+    'dashboard.active_alerts': 'Alertas Ativos',
+    'dashboard.error.load': 'Erro ao carregar dados do dashboard',
+
+    // Common
+    'common.loading': 'Carregando...',
+    'common.save': 'Salvar',
+    'common.update': 'Atualizar',
+    'common.cancel': 'Cancelar',
+    'common.edit': 'Editar',
+    'common.delete': 'Excluir',
+
+    // Outros campos...
+    'cultures.title': 'Gestão de Culturas',
+    'properties.title': 'Gestão de Propriedades',
+    'alerts.title': 'Alertas e Notificações',
+    'users.title': 'Gerenciamento de Usuários',
+    'settings.title': 'Configurações do Sistema'
+  },
+
+  en: {
+    // Menu
+    'menu.dashboard': 'Dashboard',
+    'menu.properties': 'Properties',
+    'menu.cultures': 'Cultures',
+    'menu.weather': 'Weather',
+    'menu.alerts': 'Alerts',
+    'menu.users': 'Users',
+    'menu.settings': 'Settings',
+
+    // Auth
+    'auth.login': 'Login',
+    'auth.logout': 'Logout',
+    'auth.logout_success': 'Logout successful!',
+    'auth.logging_in': 'Logging in...',
+
+    // User Types
+    'user.types.producer': 'Producer',
+    'user.types.supplier': 'Supplier',
+    'user.types.buyer': 'Buyer',
+
+    // Dashboard
+    'dashboard.welcome': 'Welcome',
+    'dashboard.total_properties': 'Total Properties',
+    'dashboard.cultivated_area': 'Cultivated Area',
+    'dashboard.total_cultures': 'Registered Cultures',
+    'dashboard.active_alerts': 'Active Alerts',
+    'dashboard.error.load': 'Error loading dashboard data',
+
+    // Common
+    'common.loading': 'Loading...',
+    'common.save': 'Save',
+    'common.update': 'Update',
+    'common.cancel': 'Cancel',
+    'common.edit': 'Edit',
+    'common.delete': 'Delete',
+
+    // Outros campos...
+    'cultures.title': 'Culture Management',
+    'properties.title': 'Property Management',
+    'alerts.title': 'Alerts and Notifications',
+    'users.title': 'User Management',
+    'settings.title': 'System Settings'
+  }
+};
+
+export const LanguageProvider = ({ children }) => {
+  const [language, setLanguage] = useState(() => {
+    return localStorage.getItem('language') || 'pt';
+  });
+
+  useEffect(() => {
+    localStorage.setItem('language', language);
+  }, [language]);
+
+  const t = (key, fallback = null) => {
+    // Buscar tradução no idioma atual
+    const translation = translations[language]?.[key];
+    if (translation) {
+      return translation;
+    }
+    
+    // Fallback para português se não encontrar
+    const ptTranslation = translations['pt']?.[key];
+    if (ptTranslation) {
+      return ptTranslation;
+    }
+    
+    // Se forneceu um fallback, usar ele
+    if (fallback) {
+      return fallback;
+    }
+    
+    // Caso contrário, retornar a própria chave SEM mostrar o key
+    // Para debug, você pode remover este comentário e retornar key:
+    // return key;
+    
+    // Por enquanto, vamos retornar strings mais amigáveis:
+    switch(key) {
+      case 'menu.dashboard': return 'Dashboard';
+      case 'menu.properties': return 'Propriedades';
+      case 'menu.cultures': return 'Culturas';
+      case 'menu.weather': return 'Clima';
+      case 'menu.alerts': return 'Alertas';
+      case 'menu.users': return 'Usuários';
+      case 'menu.settings': return 'Configurações';
+      case 'auth.logout': return 'Sair';
+      case 'user.types.producer': return 'Produtor';
+      case 'dashboard.welcome': return 'Bem-vindo';
+      case 'dashboard.total_properties': return 'Total de Propriedades';
+      case 'dashboard.cultivated_area': return 'Área Cultivada';
+      case 'dashboard.total_cultures': return 'Culturas Cadastradas';
+      case 'dashboard.active_alerts': return 'Alertas Ativos';
+      case 'common.loading': return 'Carregando...';
+      default: return key;
+    }
+  };
+
+  const changeLanguage = (lang) => {
+    if (translations[lang]) {
+      setLanguage(lang);
+    }
+  };
+
+  const value = {
+    language,
+    setLanguage: changeLanguage,
+    t,
+    availableLanguages: Object.keys(translations)
+  };
+
+  return (
+    <LanguageContext.Provider value={value}>
+      {children}
+    </LanguageContext.Provider>
+  );
+};
+
+export default LanguageContext;
